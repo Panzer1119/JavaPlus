@@ -2,6 +2,7 @@ package de.codemakers.io.file;
 
 import de.codemakers.logger.Logger;
 import de.codemakers.util.ArrayUtil;
+import de.codemakers.util.StringUtil;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -23,6 +24,7 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -192,14 +194,21 @@ public class AdvancedFile {
         if (paths == null || paths.length == 0) {
             return this;
         }
+        final boolean could_be_intern = folder == null && this.paths.isEmpty() && paths.length > 1;
         for (String path_toAdd : paths) {
+            if (path_toAdd == null) {
+                continue;
+            }
             path_toAdd = path_toAdd.replace(WINDOWS_SEPARATOR_CHAR, PATH_SEPARATOR_CHAR);
-            final String[] split = path_toAdd.split(PATH_SEPARATOR);
+            final String[] split = StringUtil.split(path_toAdd, PATH_SEPARATOR);
             for (String g : split) {
                 if (!g.isEmpty() || this.paths.isEmpty()) { //TODO Maybe allow always empty Strings??
-                    this.paths.add(g);
                 }
+                this.paths.add(g);
             }
+        }
+        if (could_be_intern && !isIntern()) {
+            this.paths.add(0, "");
         }
         return this;
     }
@@ -325,7 +334,16 @@ public class AdvancedFile {
     }
 
     private final String createPath() {
-        return (isIntern() ? "" : folder.getAbsolutePath()) + paths.stream().map((path_temp) -> ((path_temp.startsWith(separator) ? "" : separator)) + path_temp).collect(Collectors.joining());
+        final StringBuilder path_builder = new StringBuilder();
+        if (folder != null) {
+            path_builder.append(folder.getAbsolutePath());
+        }
+        final boolean not_intern = !isIntern() && folder == null && paths.size() > 0;
+        if (not_intern) {
+            path_builder.append(paths.get(0));
+        }
+        path_builder.append(paths.stream().skip(((not_intern || isIntern()) ? 1 : 0)).map((path_temp) -> ((path_temp.startsWith(separator) ? "" : separator)) + path_temp).collect(Collectors.joining()));
+        return path_builder.toString();
     }
 
     /**
@@ -348,7 +366,7 @@ public class AdvancedFile {
      * running jar file
      */
     public final boolean isIntern() {
-        return folder == null;
+        return folder == null && paths.size() > 1 && paths.get(0).isEmpty();
     }
 
     /**
@@ -393,16 +411,16 @@ public class AdvancedFile {
      */
     public final AdvancedFile getParent() {
         resetValues();
-        if (paths.size() > 1) {
+        if (isIntern()) {
+            if (paths.size() == 2) {
+                return new AdvancedFile(false, folder, "/");
+            } else {
+                return new AdvancedFile(false, folder, getPaths(paths.size() - 1));
+            }
+        } else if (paths.size() > 1) {
             return new AdvancedFile(false, folder, getPaths(paths.size() - 1));
-        } else if (paths.size() == 1 && !isIntern()) {
-            return new AdvancedFile(false, folder);
-        } else if (!isIntern()) {
-            return new AdvancedFile(false, folder.getParentFile());
-        } else if (isIntern()) {
-            return new AdvancedFile(false, folder, "");
         } else {
-            return null;
+            return new AdvancedFile(false, folder.getParentFile());
         }
     }
 
@@ -633,7 +651,7 @@ public class AdvancedFile {
                 return FileType.NON;
             }
             final Path myPathTest = myPath;
-            final FileVisitor<Path> fileVisitor = new SimpleFileVisitor<Path>() { //TODO Maybe listAdvancedFiles from parent and then searching for this is a better option???
+            final FileVisitor<Path> fileVisitor = new SimpleFileVisitor<Path>() { //TODO Maybe listAdvancedFiles from parent and then searching for this is a better option??? //TODO Aber das funzt doch nicht???
 
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
@@ -658,7 +676,11 @@ public class AdvancedFile {
                 }
 
             };
-            Files.walkFileTree(myPath, fileVisitor);
+            try {
+                Files.walkFileTree(myPath, fileVisitor);
+            } catch (Exception ex) {
+                Logger.logErr("Error while walking through the file tree", ex);
+            }
             if (fileSystem != null) {
                 fileSystem.close();
             }
