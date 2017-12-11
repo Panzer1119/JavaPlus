@@ -334,8 +334,11 @@ public class AdvancedFile implements Comparable<File> {
         if (folder != null) {
             path_builder.append(folder.getAbsolutePath());
         }
-        final boolean correct = (isIntern() && !paths.isEmpty() && (paths.size() == 1 || paths.get(0).isEmpty())) || !isIntern();
+        final boolean correct = !paths.isEmpty() && ((isIntern() && (paths.size() == 1 || paths.get(0).isEmpty())) || !isIntern());
         if (correct) {
+            if (folder != null) {
+                path_builder.append(separator);
+            }
             path_builder.append(paths.get(0));
         }
         if (!correct || paths.size() > 1) {
@@ -778,7 +781,8 @@ public class AdvancedFile implements Comparable<File> {
 
     @Override
     public final String toString() {
-        return String.format("\"%s\" (intern: %b, absolute: %b, shouldBeFile: %b, exists: %b, file: %b)", getPath(), isIntern(), isAbsolute(), shouldBeFile(), exists(), isFile());
+        //return String.format("\"%s\" (intern: %b, absolute: %b, shouldBeFile: %b, exists: %b, file: %b)", getPath(), isIntern(), isAbsolute(), shouldBeFile(), exists(), isFile());
+        return getPath();
     }
 
     /**
