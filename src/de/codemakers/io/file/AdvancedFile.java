@@ -2,7 +2,6 @@ package de.codemakers.io.file;
 
 import de.codemakers.logger.Logger;
 import de.codemakers.util.ArrayUtil;
-import de.codemakers.util.StringUtil;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -24,6 +23,7 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -36,7 +36,7 @@ import org.apache.commons.io.IOUtils;
  *
  * @author Paul Hagedorn
  */
-public class AdvancedFile {
+public class AdvancedFile implements Comparable<File> {
 
     public static final char PATH_SEPARATOR_CHAR = '/';
     public static final String PATH_SEPARATOR = Character.toString(PATH_SEPARATOR_CHAR);
@@ -58,6 +58,7 @@ public class AdvancedFile {
     private final ArrayList<String> paths = new ArrayList<>();
     private String separator = PATH_SEPARATOR;
     private boolean shouldBeFile = true;
+    private boolean isIntern = false;
     //Regenerated things
     private String path = null;
     private File file = null;
@@ -65,41 +66,49 @@ public class AdvancedFile {
     /**
      * Creates an AdvancedFile which is relative
      *
+     * @param isIntern Boolean if this AdvancedFile is located in a jar or out
+     * of a jar
      * @param paths String Array Paths
      */
-    public AdvancedFile(String... paths) {
-        this(true, paths);
+    public AdvancedFile(boolean isIntern, String... paths) {
+        this(isIntern, true, paths);
         generateShouldBeFile();
     }
 
     /**
      * Creates an AdvancedFile which is relative
      *
+     * @param isIntern Boolean if this AdvancedFile is located in a jar or out
+     * of a jar
      * @param shouldBeFile Boolean if this AdvancedFile should be a file or a
      * directory
      * @param paths String Array Paths
      */
-    public AdvancedFile(boolean shouldBeFile, String... paths) {
-        this(shouldBeFile, null, paths);
+    public AdvancedFile(boolean isIntern, boolean shouldBeFile, String... paths) {
+        this(isIntern, shouldBeFile, null, paths);
     }
 
     /**
      * Creates an AdvancedFile which can be relative or absolute
      *
+     * @param isIntern Boolean if this AdvancedFile is located in a jar or out
+     * of a jar
      * @param parent Object If File than it can be the Folder, where the Paths
      * is in (If null then this AdvancedFile is a relative path) or if it is an
      * AndvancedFile than this AdvancedFile is a child of the parent
      * AdvancedFile
      * @param paths String Array Paths
      */
-    public AdvancedFile(Object parent, String... paths) {
-        this(true, parent, paths);
+    public AdvancedFile(boolean isIntern, Comparable<File> parent, String... paths) {
+        this(isIntern, true, parent, paths);
         generateShouldBeFile();
     }
 
     /**
      * Creates an AdvancedFile which can be relative or absolute
      *
+     * @param isIntern Boolean if this AdvancedFile is located in a jar or out
+     * of a jar
      * @param shouldBeFile Boolean if this AdvancedFile should be a file or a
      * directory
      * @param parent Object If File than it can be the Folder, where the Paths
@@ -108,7 +117,8 @@ public class AdvancedFile {
      * AdvancedFile
      * @param paths String Array Paths
      */
-    public AdvancedFile(boolean shouldBeFile, Object parent, String... paths) {
+    public AdvancedFile(boolean isIntern, boolean shouldBeFile, Comparable<File> parent, String... paths) {
+        this.isIntern = isIntern;
         this.shouldBeFile = shouldBeFile;
         setParent(parent);
         addPaths(paths);
@@ -122,7 +132,7 @@ public class AdvancedFile {
      */
     public final AdvancedFile copy() {
         resetValues();
-        return new AdvancedFile(shouldBeFile, folder, getPaths());
+        return new AdvancedFile(isIntern, shouldBeFile, folder, getPaths());
     }
 
     /**
@@ -138,6 +148,7 @@ public class AdvancedFile {
         this.path = advancedFile.path;
         this.paths.addAll(advancedFile.paths);
         this.separator = advancedFile.separator;
+        this.isIntern = advancedFile.isIntern;
         this.shouldBeFile = advancedFile.shouldBeFile;
         resetValues();
         return this;
@@ -150,9 +161,9 @@ public class AdvancedFile {
      */
     public final AdvancedFile getAbsoluteAdvancedFile() {
         if (shouldBeFile) {
-            return new AdvancedFile(new File("").getAbsolutePath() + PATH_SEPARATOR + getPath());
+            return new AdvancedFile(isIntern, new File("").getAbsolutePath() + PATH_SEPARATOR + getPath());
         } else {
-            return new AdvancedFile(false, toFile().getAbsoluteFile());
+            return new AdvancedFile(isIntern, false, toFile().getAbsoluteFile());
         }
     }
 
@@ -165,7 +176,7 @@ public class AdvancedFile {
         if (isIntern()) {
             final File file_temp = new File(concatSystemPath());
             if (file_temp.isAbsolute()) {
-                return copyFrom(new AdvancedFile(file_temp.getParentFile(), file_temp.getName()));
+                return copyFrom(new AdvancedFile(isIntern, file_temp.getParentFile(), file_temp.getName()));
             }
         }
         return this;
@@ -193,21 +204,12 @@ public class AdvancedFile {
         if (paths == null || paths.length == 0) {
             return this;
         }
-        final boolean could_be_intern = folder == null && this.paths.isEmpty() && paths.length > 1;
         for (String path_toAdd : paths) {
             if (path_toAdd == null) {
                 continue;
             }
             path_toAdd = path_toAdd.replace(WINDOWS_SEPARATOR_CHAR, PATH_SEPARATOR_CHAR);
-            final String[] split = StringUtil.split(path_toAdd, PATH_SEPARATOR);
-            for (String g : split) {
-                if (!g.isEmpty() || this.paths.isEmpty()) { //TODO Maybe allow always empty Strings??
-                }
-                this.paths.add(g);
-            }
-        }
-        if (could_be_intern && !isIntern()) {
-            this.paths.add(0, "");
+            this.paths.addAll(Arrays.asList(path_toAdd.split(PATH_SEPARATOR)));
         }
         return this;
     }
@@ -236,12 +238,7 @@ public class AdvancedFile {
         final ArrayList<String> paths_new = new ArrayList<>();
         for (String path_toAdd : paths) {
             path_toAdd = path_toAdd.replace(WINDOWS_SEPARATOR_CHAR, PATH_SEPARATOR_CHAR);
-            final String[] split = path_toAdd.split(PATH_SEPARATOR);
-            for (String g : split) {
-                if (!g.isEmpty() || (this.paths.isEmpty() || !this.paths.get(0).isEmpty())) { //TODO Maybe allow always empty Strings??
-                    paths_new.add(g);
-                }
-            }
+            paths_new.addAll(Arrays.asList(path_toAdd.split(PATH_SEPARATOR)));
         }
         paths_new.addAll(this.paths);
         this.paths.clear();
@@ -337,11 +334,13 @@ public class AdvancedFile {
         if (folder != null) {
             path_builder.append(folder.getAbsolutePath());
         }
-        final boolean not_intern = !isIntern() && folder == null && paths.size() > 0;
-        if (not_intern) {
+        final boolean correct = (isIntern() && !paths.isEmpty() && (paths.size() == 1 || paths.get(0).isEmpty())) || !isIntern();
+        if (correct) {
             path_builder.append(paths.get(0));
         }
-        path_builder.append(paths.stream().skip(((not_intern || isIntern()) ? 1 : 0)).map((path_temp) -> ((path_temp.startsWith(separator) ? "" : separator)) + path_temp).collect(Collectors.joining()));
+        if (!correct || paths.size() > 1) {
+            path_builder.append(paths.stream().skip((correct ? 1 : 0)).map((path_temp) -> ((path_temp.startsWith(separator) ? "" : separator)) + path_temp).collect(Collectors.joining()));
+        }
         return path_builder.toString();
     }
 
@@ -352,7 +351,7 @@ public class AdvancedFile {
      */
     public final boolean isAbsolute() {
         if (isIntern()) {
-            return false;
+            return getPath().startsWith(PATH_SEPARATOR);
         } else {
             return toFile().isAbsolute();
         }
@@ -365,7 +364,19 @@ public class AdvancedFile {
      * running jar file
      */
     public final boolean isIntern() {
-        return folder == null && paths.size() > 1 && paths.get(0).isEmpty();
+        return isIntern;
+    }
+
+    /**
+     * Sets if this AdvancedFile is located in the current running jar file
+     *
+     * @param isIntern Boolean if this AdvancedFile is located in a jar or out
+     * of a jar
+     * @return A reference to this AdvancedFile
+     */
+    public final AdvancedFile setIsIntern(boolean isIntern) {
+        this.isIntern = isIntern;
+        return this;
     }
 
     /**
@@ -412,14 +423,14 @@ public class AdvancedFile {
         resetValues();
         if (isIntern()) {
             if (paths.size() == 2) {
-                return new AdvancedFile(false, folder, "/");
+                return new AdvancedFile(isIntern, false, folder, "/");
             } else {
-                return new AdvancedFile(false, folder, getPaths(paths.size() - 1));
+                return new AdvancedFile(isIntern, false, folder, getPaths(paths.size() - 1));
             }
         } else if (paths.size() > 1) {
-            return new AdvancedFile(false, folder, getPaths(paths.size() - 1));
+            return new AdvancedFile(isIntern, false, folder, getPaths(paths.size() - 1));
         } else {
-            return new AdvancedFile(false, folder.getParentFile());
+            return new AdvancedFile(isIntern, false, folder.getParentFile());
         }
     }
 
@@ -432,19 +443,14 @@ public class AdvancedFile {
      * AdvancedFile
      * @return A reference to this AdvancedFile
      */
-    public final AdvancedFile setParent(Object parent) {
+    public final AdvancedFile setParent(Comparable<File> parent) {
         return setParent(parent, true, true);
     }
 
-    private final AdvancedFile setParent(Object parent, boolean withFolder, boolean withPaths) {
+    private final AdvancedFile setParent(Comparable<File> parent, boolean withFolder, boolean withPaths) {
         resetValues();
         if (withFolder && parent == null) {
             setFolder(null);
-        } else if (parent instanceof String) {
-            final File folder_ = new File((String) parent).getAbsoluteFile();
-            if (withFolder) {
-                setFolder(folder_);
-            }
         } else if (parent instanceof File) {
             final File folder_ = (File) parent;
             if (withFolder && folder_.isAbsolute()) {
@@ -474,7 +480,7 @@ public class AdvancedFile {
      * AdvancedFile
      * @return A copy of this AdvancedFile
      */
-    public final AdvancedFile withParent(Object parent) {
+    public final AdvancedFile withParent(Comparable<File> parent) {
         return copy().setParent(parent);
     }
 
@@ -487,7 +493,7 @@ public class AdvancedFile {
      * AdvancedFile
      * @return A reference to this AdvancedFile
      */
-    public final AdvancedFile setParents(Object... parents) {
+    public final AdvancedFile setParents(Comparable<File>... parents) {
         if (parents == null || parents.length == 0) {
             return this;
         }
@@ -507,7 +513,7 @@ public class AdvancedFile {
      * AdvancedFile
      * @return A copy of this AdvancedFile
      */
-    public final AdvancedFile withParents(Object... parents) {
+    public final AdvancedFile withParents(Comparable<File>... parents) {
         return copy().setParents(parents);
     }
 
@@ -589,7 +595,7 @@ public class AdvancedFile {
     public final boolean exists() {
         if (isIntern()) {
             try {
-                final URI uri = getURI();
+                final URI uri = getURIIntern(false);
                 return uri != null;
             } catch (Exception ex) {
                 Logger.logErr("Error while checking file existance: " + ex, ex);
@@ -625,60 +631,64 @@ public class AdvancedFile {
 
     private final FileType getInternFileType() {
         try {
-            final URI uri = getParent().getURI();
+            final URI uri = getParent().getURIIntern(false);
             if (uri == null) {
                 return FileType.NON;
             }
             final AtomicBoolean isFile = new AtomicBoolean(false);
             final AtomicBoolean isDirectory = new AtomicBoolean(false);
             FileSystem fileSystem = null;
-            Path myPath = null;
-            if (uri.getScheme().equalsIgnoreCase("jar") || uri.getScheme().equalsIgnoreCase("zip")) { //TODO Funzt das auch mit zips?
-                try {
-                    fileSystem = FileSystems.newFileSystem(uri, Collections.<String, Object>emptyMap());
-                    if (fileSystem != null) {
-                        myPath = fileSystem.getPath(getPath());
+            try {
+                Path myPath = null;
+                if (uri.getScheme().equalsIgnoreCase("jar") || uri.getScheme().equalsIgnoreCase("zip")) {
+                    try {
+                        fileSystem = FileSystems.newFileSystem(uri, Collections.<String, Object>emptyMap());
+                        if (fileSystem != null) {
+                            myPath = fileSystem.getPath(getPath());
+                        }
+                    } catch (Exception ex) {
+                        Logger.logErr("Erorr while resolving path from file system: " + ex, ex);
+                        return FileType.NON;
                     }
-                } catch (Exception ex) {
-                    Logger.logErr("Erorr while resolving path from file system: " + ex, ex);
+                } else {
+                    myPath = Paths.get(uri);
+                }
+                if (myPath == null) {
                     return FileType.NON;
                 }
-            } else {
-                myPath = Paths.get(uri);
-            }
-            if (myPath == null) {
-                return FileType.NON;
-            }
-            final Path myPathTest = myPath;
-            final FileVisitor<Path> fileVisitor = new SimpleFileVisitor<Path>() { //TODO Maybe listAdvancedFiles from parent and then searching for this is a better option??? //TODO Aber das funzt doch nicht???
+                final Path myPathTest = myPath;
+                final FileVisitor<Path> fileVisitor = new SimpleFileVisitor<Path>() { //TODO Maybe listAdvancedFiles from parent and then searching for this is a better option??? //TODO Aber das funzt doch nicht???
 
-                @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                    final String name = file.toString().replace(WINDOWS_SEPARATOR_CHAR, PATH_SEPARATOR_CHAR);
-                    if (file.getParent().equals(myPathTest) && name.endsWith(getPath())) {
-                        isFile.set(true);
-                        return FileVisitResult.TERMINATE;
-                    } else {
-                        return FileVisitResult.CONTINUE;
+                    @Override
+                    public final FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                        final String name = file.toString().replace(WINDOWS_SEPARATOR_CHAR, PATH_SEPARATOR_CHAR);
+                        if (file.getParent().equals(myPathTest) && name.endsWith(getPath())) {
+                            isFile.set(true);
+                            return FileVisitResult.TERMINATE;
+                        } else {
+                            return FileVisitResult.CONTINUE;
+                        }
                     }
-                }
 
-                @Override
-                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-                    final String name = dir.toString().replace(WINDOWS_SEPARATOR_CHAR, PATH_SEPARATOR_CHAR);
-                    if (dir.getParent().equals(myPathTest) && name.endsWith(getPath())) {
-                        isDirectory.set(true);
-                        return FileVisitResult.TERMINATE;
-                    } else {
-                        return FileVisitResult.CONTINUE;
+                    @Override
+                    public final FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                        final String name = dir.toString().replace(WINDOWS_SEPARATOR_CHAR, PATH_SEPARATOR_CHAR);
+                        if (dir.getParent().equals(myPathTest) && name.endsWith(getPath())) {
+                            isDirectory.set(true);
+                            return FileVisitResult.TERMINATE;
+                        } else {
+                            return FileVisitResult.CONTINUE;
+                        }
                     }
-                }
 
-            };
-            try {
-                Files.walkFileTree(myPath, fileVisitor);
+                };
+                try {
+                    Files.walkFileTree(myPath, fileVisitor);
+                } catch (Exception ex) {
+                    Logger.logErr("Error while walking through the file tree", ex);
+                }
             } catch (Exception ex) {
-                Logger.logErr("Error while walking through the file tree", ex);
+                Logger.logErr("Error while getting FileType", ex);
             }
             if (fileSystem != null) {
                 fileSystem.close();
@@ -768,7 +778,7 @@ public class AdvancedFile {
 
     @Override
     public final String toString() {
-        return getPath();
+        return String.format("\"%s\" (intern: %b, absolute: %b, shouldBeFile: %b, exists: %b, file: %b)", getPath(), isIntern(), isAbsolute(), shouldBeFile(), exists(), isFile());
     }
 
     /**
@@ -966,60 +976,75 @@ public class AdvancedFile {
         }
         try {
             if (isIntern()) {
-                final URI uri = getURI();
+                final URI uri = getURIIntern(false);
                 if (uri == null) {
                     return files;
                 }
                 FileSystem fileSystem = null;
-                Path myPath = null;
-                if (uri.getScheme().equalsIgnoreCase("jar") || uri.getScheme().equalsIgnoreCase("zip")) { //TODO Funzt das auch mit zips?
-                    try {
-                        fileSystem = FileSystems.newFileSystem(uri, Collections.<String, Object>emptyMap());
-                        if (fileSystem != null) {
-                            myPath = fileSystem.getPath(getPath());
+                try {
+                    Path myPath = null;
+                    if (uri.getScheme().equalsIgnoreCase("jar") || uri.getScheme().equalsIgnoreCase("zip")) {
+                        try {
+                            fileSystem = FileSystems.newFileSystem(uri, Collections.<String, Object>emptyMap());
+                            if (fileSystem != null) {
+                                myPath = fileSystem.getPath(getPath());
+                            }
+                        } catch (Exception ex) {
+                            Logger.logErr("Erorr while resolving path from file system: " + ex, ex);
+                            return files;
                         }
-                    } catch (Exception ex) {
-                        Logger.logErr("Erorr while resolving path from file system: " + ex, ex);
+                    } else {
+                        myPath = Paths.get(uri);
+                    }
+                    if (myPath == null) {
                         return files;
                     }
-                } else {
-                    myPath = Paths.get(uri);
-                }
-                if (myPath == null) {
-                    return files;
-                }
-                final Path myPathTest = myPath;
-                final FileVisitor<Path> fileVisitor = new SimpleFileVisitor<Path>() {
+                    final Path myPathTest = myPath;
+                    final FileVisitor<Path> fileVisitor = new SimpleFileVisitor<Path>() {
 
-                    @Override
-                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                        final String path_temp = file.toString();
-                        final String path_name = AdvancedFile.getName(path_temp);
-                        if ((advancedFileFilter == null || advancedFileFilter.accept(ME, path_name)) && (recursiv || file.getParent().equals(myPathTest))) {
-                            files.add(new AdvancedFile(true, ME, path_name));
+                        @Override
+                        public final FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                            final String path_temp = file.toString();
+                            final String path_name = AdvancedFile.getName(path_temp);
+                            final AdvancedFile file_ = new AdvancedFile(isIntern, true, ME, path_name);
+                            if ((advancedFileFilter == null || advancedFileFilter.accept(ME, path_name)) && (recursiv || file.getParent().equals(myPathTest)) && !files.contains(file_)) {
+                                files.add(file_);
+                            }
+                            return FileVisitResult.CONTINUE;
                         }
-                        return FileVisitResult.CONTINUE;
-                    }
 
-                    @Override
-                    public FileVisitResult postVisitDirectory(Path dir, IOException ex) throws IOException {
-                        final String path_temp = dir.toString();
-                        final String path_name = AdvancedFile.getName(path_temp);
-                        if ((advancedFileFilter == null || advancedFileFilter.accept(ME, path_name)) && (recursiv || dir.getParent().equals(myPathTest))) {
-                            files.add(new AdvancedFile(false, ME, path_name));
+                        @Override
+                        public final FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                            if (myPathTest.equals(dir)) {
+                                return FileVisitResult.CONTINUE;
+                            }
+                            final String path_temp = dir.toString();
+                            final String path_name = AdvancedFile.getName(path_temp);
+                            final AdvancedFile dir_ = new AdvancedFile(isIntern, false, ME, path_name);
+                            if ((advancedFileFilter == null || advancedFileFilter.accept(ME, path_name)) && (recursiv || dir.getParent().equals(myPathTest)) && !files.contains(dir_)) {
+                                files.add(dir_);
+                                return FileVisitResult.CONTINUE;
+                            } else {
+                                return FileVisitResult.SKIP_SIBLINGS;
+                            }
                         }
-                        return FileVisitResult.CONTINUE;
-                    }
 
-                };
-                Files.walkFileTree(myPath, fileVisitor);
+                    };
+                    try {
+                        Files.walkFileTree(myPath, fileVisitor);
+                    } catch (Exception ex) {
+                        Logger.logErr("Error while walking through the file tree", ex);
+                    }
+                } catch (Exception ex) {
+                    Logger.logErr("Error while listing AdvancedFiles", ex);
+                }
                 if (fileSystem != null) {
                     fileSystem.close();
                 }
             } else {
                 for (File f : toFile().listFiles()) {
                     if (advancedFileFilter == null || advancedFileFilter.accept(ME, f.getName())) {
-                        AdvancedFile advancedFile = new AdvancedFile(f.isFile(), this, f.getName());
+                        final AdvancedFile advancedFile = new AdvancedFile(isIntern, f.isFile(), this, f.getName());
                         files.add(advancedFile);
                         if (recursiv && f.isDirectory()) {
                             files.addAll(advancedFile.listAdvancedFiles(advancedFileFilter, recursiv));
@@ -1090,6 +1115,10 @@ public class AdvancedFile {
      * @return URI URI
      */
     public final URI getURI() {
+        return getURIIntern(true);
+    }
+
+    private final URI getURIIntern(boolean log_exception) {
         try {
             if (isIntern()) {
                 return AdvancedFile.class.getResource(getPath()).toURI();
@@ -1097,10 +1126,12 @@ public class AdvancedFile {
                 return toFile().toURI();
             }
         } catch (Exception ex) {
-            if (ex instanceof NullPointerException) {
-                Logger.log("File not found!");
-            } else {
-                Logger.logErr("Error while creating URI: " + ex, ex);
+            if (log_exception) {
+                if (ex instanceof NullPointerException) {
+                    Logger.log(this + " not found!");
+                } else {
+                    Logger.logErr("Error while creating URI: " + ex, ex);
+                }
             }
             return null;
         }
@@ -1164,7 +1195,7 @@ public class AdvancedFile {
      * @return AdvancedFile (that is a file)
      */
     public static final AdvancedFile fileOfPath(String path) {
-        return new AdvancedFile(path).setShouldBeFile(true).getAbsoluteAdvancedFile();
+        return new AdvancedFile(false, path).setShouldBeFile(true).getAbsoluteAdvancedFile();
     }
 
     /**
@@ -1174,7 +1205,15 @@ public class AdvancedFile {
      * @return AdvancedFile (that is a folder)
      */
     public static final AdvancedFile folderOfPath(String path) {
-        return new AdvancedFile(path).setShouldBeFile(false).getAbsoluteAdvancedFile();
+        return new AdvancedFile(false, path).setShouldBeFile(false).getAbsoluteAdvancedFile();
+    }
+
+    @Override
+    public final int compareTo(File file) {
+        if (file == null) {
+            return 0;
+        }
+        return file.compareTo(toFile());
     }
 
     public static enum FileType {
@@ -1214,19 +1253,20 @@ public class AdvancedFile {
     }
 
     public static enum PathType {
-        ABSOLUTE,
-        RELATIVE,
-        INTERN;
+        EXTERN_ABSOLUTE,
+        EXTERN_RELATIVE,
+        INTERN_ABSOLUTE,
+        INTERN_RELATIVE;
 
         public static final PathType of(boolean isAbsolute, boolean isIntern) {
             if (!isAbsolute && !isIntern) {
-                return RELATIVE;
+                return EXTERN_RELATIVE;
             } else if (isAbsolute && !isIntern) {
-                return ABSOLUTE;
+                return EXTERN_ABSOLUTE;
             } else if (!isAbsolute && isIntern) {
-                return INTERN;
+                return INTERN_RELATIVE;
             } else if (isAbsolute && isIntern) {
-                return null;
+                return INTERN_ABSOLUTE;
             } else {
                 return null;
             }
