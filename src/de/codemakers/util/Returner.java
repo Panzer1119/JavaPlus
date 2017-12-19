@@ -1,5 +1,7 @@
 package de.codemakers.util;
 
+import java.util.function.Supplier;
+
 /**
  * Returner
  *
@@ -24,6 +26,10 @@ public class Returner<T> {
 
     public final T or(T other) {
         return (value != null) ? value : other;
+    }
+
+    public final T or(Supplier<T> supplier) {
+        return (value != null || supplier == null) ? value : supplier.get();
     }
 
     public static final Returner<Integer> of(Integer value) {
