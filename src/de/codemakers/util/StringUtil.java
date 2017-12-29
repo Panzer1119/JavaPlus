@@ -1,6 +1,7 @@
 package de.codemakers.util;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -27,6 +28,133 @@ public class StringUtil {
         }
         temp_list.add(temp);
         return temp_list.toArray(new String[temp_list.size()]);
+    }
+
+    public static final boolean stringEquals(String text, String[] toTest) {
+        for (String g : toTest) {
+            if (text.equals(g)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static final boolean stringEqualsIgnoreCase(String text, String[] toTest) {
+        for (String g : toTest) {
+            if (text.equalsIgnoreCase(g)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static final boolean stringContains(String text, String[] toTest) {
+        for (String g : toTest) {
+            if (text.contains(g)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static final <T> T[] concatArrays(T[]... arrays) {
+        if (arrays == null || arrays.length == 0) {
+            return null;
+        }
+        return (T[]) Arrays.asList(arrays).toArray();
+    }
+
+    public static final String stringToLettersAndDigitsOnly(String text) {
+        return stringToLettersAndDigitsOnly(text, false);
+    }
+
+    public static final String stringToLettersAndDigitsOnly(String text, boolean invert, Character... exceptions) {
+        if (text == null) {
+            return null;
+        }
+        try {
+            String out = "";
+            for (int i = 0; i < text.length(); i++) {
+                if (Character.isLetterOrDigit(text.charAt(i)) == !invert || ArrayUtil.contains(exceptions, text.charAt(i))) {
+                    out += text.charAt(i);
+                }
+            }
+            return out;
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    public static final boolean isStringLettersAndDigitsOnly(String text) {
+        if (text == null) {
+            return false;
+        }
+        if (text.isEmpty()) {
+            return true;
+        }
+        return text.equals(stringToLettersAndDigitsOnly(text));
+    }
+
+    public static final String stringToLettersOnly(String text) {
+        return stringToLettersOnly(text, false);
+    }
+
+    public static final String stringToLettersOnly(String text, boolean invert, Character... exceptions) {
+        if (text == null) {
+            return null;
+        }
+        try {
+            String out = "";
+            for (int i = 0; i < text.length(); i++) {
+                if (Character.isLetter(text.charAt(i)) == !invert || ArrayUtil.contains(exceptions, text.charAt(i))) {
+                    out += text.charAt(i);
+                }
+            }
+            return out;
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    public static final boolean isStringLettersOnly(String text) {
+        if (text == null) {
+            return false;
+        }
+        if (text.isEmpty()) {
+            return true;
+        }
+        return text.equals(stringToLettersOnly(text));
+    }
+
+    public static final String stringToDigitsOnly(String text) {
+        return stringToDigitsOnly(text, false);
+    }
+
+    public static final String stringToDigitsOnly(String text, boolean invert, Character... exceptions) {
+        if (text == null) {
+            return null;
+        }
+        try {
+            String out = "";
+            for (int i = 0; i < text.length(); i++) {
+                if (Character.isDigit(text.charAt(i)) == !invert || ArrayUtil.contains(exceptions, text.charAt(i))) {
+                    out += text.charAt(i);
+                }
+            }
+            return out;
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    public static final boolean isStringDigitsOnly(String text) {
+        if (text == null) {
+            return false;
+        }
+        if (text.isEmpty()) {
+            return true;
+        }
+        return text.equals(stringToDigitsOnly(text));
     }
 
 }
