@@ -4,9 +4,9 @@ import de.codemakers.io.file.AdvancedFile;
 import de.codemakers.logger.Logger;
 import java.awt.Dimension;
 import java.awt.DisplayMode;
-import java.awt.Frame;
 import java.awt.GraphicsEnvironment;
 import java.awt.Toolkit;
+import java.awt.Window;
 import javax.imageio.ImageIO;
 
 /**
@@ -16,9 +16,9 @@ import javax.imageio.ImageIO;
  */
 public class SwingUtil {
 
-    public static final boolean setIcon(Frame frame, AdvancedFile file) {
+    public static final boolean setIcon(Window window, AdvancedFile file) {
         try {
-            frame.setIconImage(ImageIO.read(file.createInputStream()));
+            window.setIconImage(ImageIO.read(file.createInputStream()));
             return true;
         } catch (Exception ex) {
             Logger.logErr("Error while setting icon for frame", ex);
