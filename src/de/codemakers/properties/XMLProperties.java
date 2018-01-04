@@ -83,13 +83,13 @@ public class XMLProperties {
             for (int i = (split[0].isEmpty() ? 1 : 0); i < split.length; i++) {
                 final int i_ = i;
                 temp_xml_properties = temp_xml_properties.xml_properties.stream().filter((xml_properties_) -> xml_properties_.root.getName().equals(split[i_])).findFirst().orElse(null);
-            }
-            if (temp_xml_properties == null) {
-                return null;
+                if (temp_xml_properties == null) {
+                    return null;
+                }
             }
             return temp_xml_properties.properties_files.get(name);
         } catch (Exception ex) {
-            Logger.logErr("Error while getting Properties for \"%s%s%s\"", ex, path, AdvancedFile.PATH_SEPARATOR, name);
+            Logger.logErr("Error while getting Properties for \"%s%s%s\": " + ex, ex, path, AdvancedFile.PATH_SEPARATOR, name);
             return null;
         }
     }

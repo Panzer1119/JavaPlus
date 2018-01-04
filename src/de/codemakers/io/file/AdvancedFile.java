@@ -162,10 +162,12 @@ public class AdvancedFile implements Comparable<File> {
      * @return A reference to this AdvancedFile
      */
     public final AdvancedFile getAbsoluteAdvancedFile() {
-        if (shouldBeFile) {
-            return new AdvancedFile(isIntern, new File("").getAbsolutePath() + PATH_SEPARATOR + getPath());
+        if (isIntern()) {
+            return new AdvancedFile(true, shouldBeFile, (getPath().startsWith(PATH_SEPARATOR) ? "" : PATH_SEPARATOR) + getPath());
+        } else if (shouldBeFile) {
+            return new AdvancedFile(false, true, new File("").getAbsolutePath() + PATH_SEPARATOR + getPath());
         } else {
-            return new AdvancedFile(isIntern, false, toFile().getAbsoluteFile());
+            return new AdvancedFile(false, false, toFile().getAbsoluteFile());
         }
     }
 
@@ -703,10 +705,10 @@ public class AdvancedFile implements Comparable<File> {
                 try {
                     Files.walkFileTree(myPath, fileVisitor);
                 } catch (Exception ex) {
-                    Logger.logErr("Error while walking through the file tree", ex);
+                    Logger.logErr("Error while walking through the file tree: " + ex, ex);
                 }
             } catch (Exception ex) {
-                Logger.logErr("Error while getting FileType", ex);
+                Logger.logErr("Error while getting FileType: " + ex, ex);
             }
             if (fileSystem != null) {
                 fileSystem.close();
@@ -1061,10 +1063,10 @@ public class AdvancedFile implements Comparable<File> {
                     try {
                         Files.walkFileTree(myPath, fileVisitor);
                     } catch (Exception ex) {
-                        Logger.logErr("Error while walking through the file tree", ex);
+                        Logger.logErr("Error while walking through the file tree: " + ex, ex);
                     }
                 } catch (Exception ex) {
-                    Logger.logErr("Error while listing AdvancedFiles", ex);
+                    Logger.logErr("Error while listing AdvancedFiles: " + ex, ex);
                 }
                 if (fileSystem != null) {
                     fileSystem.close();
