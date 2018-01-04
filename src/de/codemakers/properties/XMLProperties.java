@@ -1,10 +1,8 @@
 package de.codemakers.properties;
 
 import de.codemakers.io.file.AdvancedFile;
-import de.codemakers.io.file.AdvancedFileFilter;
 import de.codemakers.logger.Logger;
 import de.codemakers.util.XMLUtil;
-import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -48,31 +46,52 @@ public class XMLProperties {
             this.properties.putAll(xml_root.properties);
         }
     }
-    
+
     public final Properties getProperties() {
         final Properties temp_properties = new Properties();
         temp_properties.putAll(properties);
         temp_properties.putAll(properties_not_pass);
         return temp_properties;
     }
-    
+
+    public final AdvancedFile getRoot() {
+        return root;
+    }
+
+    public final XMLProperties getXMLRoot() {
+        return xml_root;
+    }
+
+    public final List<XMLProperties> getChildren() {
+        return xml_properties;
+    }
+
     public final Properties getProperties(AdvancedFile file) {
-        final String path = root.getParent().getPath();
-        final String path_ = file.getPath();
-        if (Objects.equals(path, path_)) {
+        if (Objects.equals(root, file)) {
             return properties_files.get(file.getName());
         }
-        final String temp = path_.substring(path.length());
-        final String[] split = temp.split(AdvancedFile.PATH_SEPARATOR);
-        XMLProperties temp_xml_properties = this;
-        for (int i = (split[0].isEmpty() ? 2 : 1); i < split.length - 1; i++) {
-            final int i_ = i;
-            temp_xml_properties = temp_xml_properties.xml_properties.stream().filter((xml_properties_) -> xml_properties_.root.getName().equals(split[i_])).findFirst().orElse(null);
-        }
-        if (temp_xml_properties == null) {
+        return getProperties(file.getParent().getPath().substring(root.getPath().length()), file.getName());
+    }
+
+    public final Properties getProperties(String path, String name) {
+        try {
+            if (path.startsWith(root.getPath())) {
+                path = path.substring(root.getPath().length());
+            }
+            final String[] split = path.split(AdvancedFile.PATH_SEPARATOR);
+            XMLProperties temp_xml_properties = this;
+            for (int i = (split[0].isEmpty() ? 1 : 0); i < split.length; i++) {
+                final int i_ = i;
+                temp_xml_properties = temp_xml_properties.xml_properties.stream().filter((xml_properties_) -> xml_properties_.root.getName().equals(split[i_])).findFirst().orElse(null);
+            }
+            if (temp_xml_properties == null) {
+                return null;
+            }
+            return temp_xml_properties.properties_files.get(name);
+        } catch (Exception ex) {
+            Logger.logErr("Error while getting Properties for \"%s%s%s\"", ex, path, AdvancedFile.PATH_SEPARATOR, name);
             return null;
         }
-        return temp_xml_properties.properties_files.get(file.getName());
     }
 
     public final boolean isRoot() {
@@ -90,22 +109,28 @@ public class XMLProperties {
                     final Document document = XMLUtil.load(files.get(0));
                     final Element rootElement = document.getRootElement();
                     rootElement.getChildren("property").forEach((element) -> {
-                        Properties temp_properties = null;
-                        final Attribute attribute = element.getAttribute("pass");
-                        if (attribute == null || Objects.equals("true", attribute.getValue())) {
-                            temp_properties = properties;
-                        } else if (Objects.equals("false", attribute.getValue())) {
-                            temp_properties = properties_not_pass;
-                        } else {
-                            throw new RuntimeException(String.format("Your value for the pass paramater \"%s\" is not recognized", attribute.getValue()));
+                        try {
+                            Properties temp_properties = null;
+                            final Attribute attribute = element.getAttribute("pass");
+                            if (attribute == null || Objects.equals("true", attribute.getValue())) {
+                                temp_properties = properties;
+                            } else if (Objects.equals("false", attribute.getValue())) {
+                                temp_properties = properties_not_pass;
+                            } else {
+                                throw new RuntimeException(String.format("Your value for the pass paramater \"%s\" is not recognized", attribute.getValue()));
+                            }
+                            temp_properties.setProperty(evaluteProperty(element.getAttributeValue("name"), properties_not_pass, properties), evaluteProperty(element.getAttributeValue("value"), properties_not_pass, properties));
+                        } catch (Exception ex) {
                         }
-                        temp_properties.setProperty(evaluteProperty(element.getAttributeValue("name"), properties_not_pass, properties), evaluteProperty(element.getAttributeValue("value"), properties_not_pass, properties));
                     });
                     rootElement.getChildren("file").forEach((element) -> {
-                        final Properties temp_properties = new Properties();
-                        temp_properties.putAll(properties);
-                        element.getChildren("property").forEach((element_) -> temp_properties.setProperty(evaluteProperty(element_.getAttributeValue("name"), properties_not_pass, temp_properties), evaluteProperty(element_.getAttributeValue("value"), properties_not_pass, temp_properties)));
-                        properties_files.put(element.getAttributeValue("name"), temp_properties);
+                        try {
+                            final Properties temp_properties = new Properties();
+                            temp_properties.putAll(properties);
+                            element.getChildren("property").forEach((element_) -> temp_properties.setProperty(evaluteProperty(element_.getAttributeValue("name"), properties_not_pass, temp_properties), evaluteProperty(element_.getAttributeValue("value"), properties_not_pass, temp_properties)));
+                            properties_files.put(element.getAttributeValue("name"), temp_properties);
+                        } catch (Exception ex) {
+                        }
                     });
                 } catch (Exception ex) {
                     Logger.logErr("Error while analyzing XMLProperties: %s", ex, root);
@@ -153,15 +178,6 @@ public class XMLProperties {
             }
             return value;
         }
-    }
-
-    public static final void main(String[] args) {
-        final AdvancedFile test = new AdvancedFile(false, "E:\\Daten\\NetBeans\\Projekte\\OmniKryptec-Engine_3.1.5\\test_infos");
-        Logger.log("Test file: %s", test);
-        final XMLProperties properties = new XMLProperties(test);
-        properties.analyze();
-        Logger.log("XMLProperties: %s", properties);
-        Logger.log(properties.getProperties(new AdvancedFile(false, "E:\\Daten\\NetBeans\\Projekte\\OmniKryptec-Engine_3.1.5\\test_infos\\jdddd.png")));
     }
 
 }
