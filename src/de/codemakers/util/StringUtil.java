@@ -11,6 +11,25 @@ import java.util.List;
  */
 public class StringUtil {
 
+    public static final int count(String text, String toCount) {
+        return count(text, toCount, 0);
+    }
+
+    public static final int count(String text, String toCount, int start_index) {
+        if (!text.contains(toCount)) {
+            return 0;
+        } else if (start_index > 0 && !text.substring(start_index).contains(toCount)) {
+            return 0;
+        }
+        int count = 0;
+        int index = start_index;
+        while ((index = text.indexOf(toCount, index)) != -1) {
+            count++;
+            index += toCount.length();
+        }
+        return count;
+    }
+
     public static final String[] split(String toSplit, String delimiter) {
         if (toSplit == null) {
             return null;

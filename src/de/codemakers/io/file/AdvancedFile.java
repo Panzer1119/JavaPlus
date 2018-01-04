@@ -25,6 +25,8 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -371,6 +373,17 @@ public class AdvancedFile implements Comparable<File> {
     }
 
     /**
+     * Returns if this AdvancedFile is not located in the current running jar
+     * file
+     *
+     * @return <tt>true</tt> if this AdvancedFile is not located in the current
+     * running jar file
+     */
+    public final boolean isExtern() {
+        return !isIntern;
+    }
+
+    /**
      * Sets if this AdvancedFile is located in the current running jar file
      *
      * @param isIntern Boolean if this AdvancedFile is located in a jar or out
@@ -432,8 +445,10 @@ public class AdvancedFile implements Comparable<File> {
             }
         } else if (paths.size() > 1) {
             return new AdvancedFile(isIntern, false, folder, getPaths(paths.size() - 1));
-        } else {
+        } else if (folder != null) {
             return new AdvancedFile(isIntern, false, folder.getParentFile());
+        } else {
+            return null;
         }
     }
 
@@ -733,6 +748,15 @@ public class AdvancedFile implements Comparable<File> {
             Logger.logErr("Could not read the File \"" + getPath() + "\": " + ex, ex);
             return null;
         }
+    }
+
+    public final AdvancedFile getRoot() {
+        String path_ = getAbsoluteAdvancedFile().getPath();
+        final int index = path_.indexOf(PATH_SEPARATOR);
+        if (index != -1) {
+            path_ = path_.substring(0, index);
+        }
+        return new AdvancedFile(isIntern, path_);
     }
 
     /**
@@ -1155,6 +1179,13 @@ public class AdvancedFile implements Comparable<File> {
     }
 
     @Override
+    public final int hashCode() {
+        int hash = 3;
+        hash = 11 * hash + Objects.hashCode(getPath());
+        return hash;
+    }
+
+    @Override
     public final boolean equals(Object object) {
         if (object == null) {
             return false;
@@ -1210,6 +1241,53 @@ public class AdvancedFile implements Comparable<File> {
      */
     public static final AdvancedFile folderOfPath(String path) {
         return new AdvancedFile(false, path).setShouldBeFile(false).getAbsoluteAdvancedFile();
+    }
+
+    public static final AdvancedFile getClosestCommonParent(AdvancedFile... advancedFiles_array) {
+        List<AdvancedFile> advancedFiles = Arrays.asList(advancedFiles_array);
+        if (advancedFiles.isEmpty()) {
+            Logger.logErr("No AdvancedFiles given", null);
+            return null;
+        } else if (advancedFiles.size() == 1) {
+            return advancedFiles.get(0).getParent();
+        }
+        if (!advancedFiles.stream().allMatch(AdvancedFile::isIntern) && !advancedFiles.stream().allMatch(AdvancedFile::isExtern)) {
+            Logger.logErr("Not all AdvancedFiles are intern/extern", null);
+            return null;
+        }
+        final AdvancedFile root = advancedFiles.get(0).getRoot();
+        if (root == null) {
+            Logger.logErr("No root available", null);
+            return null;
+        }
+        if (root.isExtern() && !advancedFiles.stream().allMatch((advancedFile) -> root.equals(advancedFile.getRoot()))) {
+            Logger.logErr("Not all AdvancedFiles are on the same root", null);
+            return null;
+        }
+        AdvancedFile parent = null;
+        boolean finished = false;
+        int smallest_count = -1;
+        while (!finished) {
+            smallest_count = advancedFiles.get(0).getPath().split(PATH_SEPARATOR).length;
+            for (AdvancedFile advancedFile : advancedFiles) {
+                smallest_count = Math.min(smallest_count, advancedFile.getPath().split(PATH_SEPARATOR).length);
+            }
+            final int smallest_count_final = smallest_count;
+            final boolean all = advancedFiles.stream().allMatch((advancedFile) -> smallest_count_final == advancedFile.getPath().split(PATH_SEPARATOR).length);
+            advancedFiles = new ArrayList<>(advancedFiles.stream().map((advancedFile) -> {
+                if (all || advancedFile.getPath().split(PATH_SEPARATOR).length > smallest_count_final) {
+                    return advancedFile.getParent();
+                }
+                return advancedFile;
+            }).filter(Objects::nonNull).collect(Collectors.toSet()));
+            if (advancedFiles.isEmpty()) {
+                finished = true;
+            } else if (advancedFiles.size() == 1) {
+                finished = true;
+                parent = advancedFiles.get(0);
+            }
+        }
+        return parent;
     }
 
     @Override
