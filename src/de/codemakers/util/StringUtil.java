@@ -176,4 +176,12 @@ public class StringUtil {
         return text.equals(stringToDigitsOnly(text));
     }
 
+    public static final boolean isEmpty(String text) {
+        return text.isEmpty();
+    }
+
+    public static final boolean notEmpty(String text) {
+        return !text.isEmpty();
+    }
+
 }

@@ -2,6 +2,7 @@ package de.codemakers.io.file;
 
 import de.codemakers.logger.Logger;
 import de.codemakers.util.ArrayUtil;
+import de.codemakers.util.StringUtil;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -22,13 +23,15 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.IOUtils;
@@ -56,11 +59,13 @@ public class AdvancedFile implements Comparable<File> {
     public static final String NOT_FOUND_STRING = String.valueOf(NOT_FOUND);
 
     private final AdvancedFile ME = this;
+    private Package relative_package = null;
     private File folder = null;
     private final ArrayList<String> paths = new ArrayList<>();
     private String separator = PATH_SEPARATOR;
     private boolean shouldBeFile = true;
     private boolean isIntern = false;
+    private StackTraceElement stackTraceElement = null;
     //Regenerated things
     private String path = null;
     private File file = null;
@@ -73,7 +78,7 @@ public class AdvancedFile implements Comparable<File> {
      * @param paths String Array Paths
      */
     public AdvancedFile(boolean isIntern, String... paths) {
-        this(isIntern, true, paths);
+        this(isIntern, true, null, paths);
         generateShouldBeFile();
     }
 
@@ -120,9 +125,35 @@ public class AdvancedFile implements Comparable<File> {
      * @param paths String Array Paths
      */
     public AdvancedFile(boolean isIntern, boolean shouldBeFile, Comparable<File> parent, String... paths) {
+        final StackTraceElement[] stackTraceElements = Thread.currentThread().getStackTrace();
+        stackTraceElement = (stackTraceElements == null || stackTraceElements.length <= 3) ? null : stackTraceElements[3];
         this.isIntern = isIntern;
         this.shouldBeFile = shouldBeFile;
+        if (isIntern && (paths != null && paths.length > 0) && paths[0].startsWith(PATH_SEPARATOR)) {
+            final List<String> temp = new ArrayList<>();
+            final String temp_ = stackTraceElement.getClassName().replaceAll("\\.", PATH_SEPARATOR);
+            temp.add(temp_.substring(0, temp_.lastIndexOf(PATH_SEPARATOR)));
+            temp.addAll(Arrays.asList(paths));
+            paths = temp.toArray(new String[temp.size()]);
+        }
         setParent(parent);
+        addPaths(paths);
+        correctAbsoluteness();
+    }
+
+    /**
+     * Creates an AdvancedFile which is intern and maybe absolute (parent ==
+     * null)
+     *
+     * @param shouldBeFile Boolean if this AdvancedFile should be a file or a
+     * directory
+     * @param parent Relative Class
+     * @param paths String Array Paths
+     */
+    public AdvancedFile(boolean shouldBeFile, Package parent, String... paths) {
+        this.isIntern = true;
+        this.shouldBeFile = shouldBeFile;
+        this.relative_package = parent;
         addPaths(paths);
         correctAbsoluteness();
     }
@@ -163,7 +194,7 @@ public class AdvancedFile implements Comparable<File> {
      */
     public final AdvancedFile getAbsoluteAdvancedFile() {
         if (isIntern()) {
-            return new AdvancedFile(true, shouldBeFile, (getPath().startsWith(PATH_SEPARATOR) ? "" : PATH_SEPARATOR) + getPath());
+            return new AdvancedFile(shouldBeFile, (Package) null, (relative_package == null ? "" : PATH_SEPARATOR + relative_package.getName().replaceAll("\\.", PATH_SEPARATOR)) + (getPath().startsWith(PATH_SEPARATOR) ? "" : PATH_SEPARATOR) + getPath());
         } else if (shouldBeFile) {
             return new AdvancedFile(false, true, new File("").getAbsolutePath() + PATH_SEPARATOR + getPath());
         } else {
@@ -177,7 +208,7 @@ public class AdvancedFile implements Comparable<File> {
      * @return A reference to this AdvancedFile
      */
     public final AdvancedFile correctAbsoluteness() {
-        if (isIntern()) {
+        if (!isIntern()) {
             final File file_temp = new File(concatSystemPath());
             if (file_temp.isAbsolute()) {
                 return copyFrom(new AdvancedFile(isIntern, file_temp.getParentFile(), file_temp.getName()));
@@ -213,7 +244,7 @@ public class AdvancedFile implements Comparable<File> {
                 continue;
             }
             path_toAdd = path_toAdd.replace(WINDOWS_SEPARATOR_CHAR, PATH_SEPARATOR_CHAR);
-            this.paths.addAll(Arrays.asList(path_toAdd.split(PATH_SEPARATOR)));
+            this.paths.addAll(Arrays.asList(path_toAdd.split(PATH_SEPARATOR)).stream().filter(StringUtil::notEmpty).collect(Collectors.toList()));
         }
         return this;
     }
@@ -242,7 +273,7 @@ public class AdvancedFile implements Comparable<File> {
         final ArrayList<String> paths_new = new ArrayList<>();
         for (String path_toAdd : paths) {
             path_toAdd = path_toAdd.replace(WINDOWS_SEPARATOR_CHAR, PATH_SEPARATOR_CHAR);
-            paths_new.addAll(Arrays.asList(path_toAdd.split(PATH_SEPARATOR)));
+            paths_new.addAll(Arrays.asList(path_toAdd.split(PATH_SEPARATOR)).stream().filter(StringUtil::notEmpty).collect(Collectors.toList()));
         }
         paths_new.addAll(this.paths);
         this.paths.clear();
@@ -321,6 +352,53 @@ public class AdvancedFile implements Comparable<File> {
         return getPath().replace(PATH_SEPARATOR_CHAR, SYSTEM_SEPARATOR_CHAR);
     }
 
+    public final void consumeRealPath(Consumer<Path> consumer) {
+        doWithRealPath((path_) -> {
+            consumer.accept(path_);
+            return null;
+        });
+    }
+
+    public final <T> T doWithRealPath(Function<Path, T> function) {
+        T output = null;
+        if (isIntern()) {
+            final URI uri = getURIIntern(false);
+            if (uri == null) {
+                return null;
+            }
+            FileSystem fileSystem = null;
+            try {
+                Path myPath = null;
+                if (uri.getScheme().equalsIgnoreCase("jar") || uri.getScheme().equalsIgnoreCase("zip")) {
+                    try {
+                        fileSystem = FileSystems.newFileSystem(uri, Collections.<String, Object>emptyMap());
+                        if (fileSystem != null) {
+                            myPath = fileSystem.getPath(getPath());
+                        } else {
+                            throw new IllegalArgumentException(String.format("Error 1 while resolving FileSystem from %s", uri));
+                        }
+                    } catch (Exception ex) {
+                        Logger.logErr("Error while resolving Path from FileSystem: " + ex, ex);
+                    }
+                } else {
+                    myPath = Paths.get(uri);
+                }
+                output = function.apply(myPath);
+            } catch (Exception ex) {
+                Logger.logErr("Error while resolving Path: " + ex, ex);
+            }
+            if (fileSystem != null) {
+                try {
+                    fileSystem.close();
+                } catch (Exception ex2) {
+                }
+            }
+        } else if (toFile() != null) {
+            output = function.apply(toFile().toPath());
+        }
+        return output;
+    }
+
     /**
      * Returns the Path
      *
@@ -335,18 +413,18 @@ public class AdvancedFile implements Comparable<File> {
 
     private final String createPath() {
         final StringBuilder path_builder = new StringBuilder();
-        if (folder != null) {
-            path_builder.append(folder.getAbsolutePath());
-        }
-        final boolean correct = !paths.isEmpty() && ((isIntern() && (paths.size() == 1 || paths.get(0).isEmpty())) || !isIntern());
-        if (correct) {
-            if (folder != null) {
+        if (isIntern()) {
+            if (relative_package != null) {
+                path_builder.append(relative_package.getName().replaceAll("\\.", separator));
+            } else if (paths.isEmpty()) {
                 path_builder.append(separator);
             }
-            path_builder.append(paths.get(0));
+        } else if (folder != null) {
+            path_builder.append(folder.getAbsolutePath());
         }
-        if (!correct || paths.size() > 1) {
-            path_builder.append(paths.stream().skip((correct ? 1 : 0)).map((path_temp) -> ((path_temp.startsWith(separator) ? "" : separator)) + path_temp).collect(Collectors.joining()));
+        path_builder.append(paths.stream().map((path_temp) -> ((path_temp.startsWith(separator) ? "" : separator)) + path_temp).collect(Collectors.joining()));
+        if ((path_builder.length() >= separator.length()) && (folder == null && relative_package == null) && (isAbsolute() || !isIntern())) {
+            path_builder.delete(0, separator.length());
         }
         return path_builder.toString();
     }
@@ -358,7 +436,7 @@ public class AdvancedFile implements Comparable<File> {
      */
     public final boolean isAbsolute() {
         if (isIntern()) {
-            return getPath().startsWith(PATH_SEPARATOR);
+            return relative_package == null;
         } else {
             return toFile().isAbsolute();
         }
@@ -440,10 +518,14 @@ public class AdvancedFile implements Comparable<File> {
     public final AdvancedFile getParent() {
         resetValues();
         if (isIntern()) {
-            if (paths.size() == 2) {
-                return new AdvancedFile(isIntern, false, folder, "/");
+            if (paths.isEmpty()) {
+                if (isAbsolute()) {
+                    return null;
+                } else {
+                    return new AdvancedFile(false, Package.getPackage(relative_package.getName().substring(0, relative_package.getName().lastIndexOf("."))));
+                }
             } else {
-                return new AdvancedFile(isIntern, false, folder, getPaths(paths.size() - 1));
+                return new AdvancedFile(false, relative_package, getPaths(paths.size() - 1));
             }
         } else if (paths.size() > 1) {
             return new AdvancedFile(isIntern, false, folder, getPaths(paths.size() - 1));
@@ -452,6 +534,17 @@ public class AdvancedFile implements Comparable<File> {
         } else {
             return null;
         }
+    }
+
+    /**
+     * Returns a new child of this AdvancedFile
+     *
+     * @param name Name of the child
+     * @param shouldBeFile <tt>true</tt> if the child should be a file
+     * @return AdvancedFile Child AdvancedFile
+     */
+    public final AdvancedFile getChild(String name, boolean shouldBeFile) {
+        return new AdvancedFile(isIntern(), shouldBeFile, this, name);
     }
 
     /**
@@ -577,7 +670,7 @@ public class AdvancedFile implements Comparable<File> {
             if (!exists()) {
                 return false;
             } else {
-                return (getInternFileType() == FileType.FILE);
+                return doWithRealPath(Files::isRegularFile);
             }
         } else {
             if (!toFile().exists()) {
@@ -597,7 +690,7 @@ public class AdvancedFile implements Comparable<File> {
             if (!exists()) {
                 return false;
             } else {
-                return (getInternFileType() == FileType.DIRECTORY);
+                return doWithRealPath(Files::isDirectory);
             }
         } else {
             if (!toFile().exists()) {
@@ -649,77 +742,6 @@ public class AdvancedFile implements Comparable<File> {
         return FileType.of(isFile(), isDirectory());
     }
 
-    private final FileType getInternFileType() {
-        try {
-            final URI uri = getParent().getURIIntern(false);
-            if (uri == null) {
-                return FileType.NON;
-            }
-            final AtomicBoolean isFile = new AtomicBoolean(false);
-            final AtomicBoolean isDirectory = new AtomicBoolean(false);
-            FileSystem fileSystem = null;
-            try {
-                Path myPath = null;
-                if (uri.getScheme().equalsIgnoreCase("jar") || uri.getScheme().equalsIgnoreCase("zip")) {
-                    try {
-                        fileSystem = FileSystems.newFileSystem(uri, Collections.<String, Object>emptyMap());
-                        if (fileSystem != null) {
-                            myPath = fileSystem.getPath(getPath());
-                        }
-                    } catch (Exception ex) {
-                        Logger.logErr("Erorr while resolving path from file system: " + ex, ex);
-                        return FileType.NON;
-                    }
-                } else {
-                    myPath = Paths.get(uri);
-                }
-                if (myPath == null) {
-                    return FileType.NON;
-                }
-                final Path myPathTest = myPath;
-                final FileVisitor<Path> fileVisitor = new SimpleFileVisitor<Path>() { //TODO Maybe listAdvancedFiles from parent and then searching for this is a better option??? //TODO Aber das funzt doch nicht???
-
-                    @Override
-                    public final FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                        final String name = file.toString().replace(WINDOWS_SEPARATOR_CHAR, PATH_SEPARATOR_CHAR);
-                        if (file.getParent().equals(myPathTest) && name.endsWith(getPath())) {
-                            isFile.set(true);
-                            return FileVisitResult.TERMINATE;
-                        } else {
-                            return FileVisitResult.CONTINUE;
-                        }
-                    }
-
-                    @Override
-                    public final FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-                        final String name = dir.toString().replace(WINDOWS_SEPARATOR_CHAR, PATH_SEPARATOR_CHAR);
-                        if (dir.getParent().equals(myPathTest) && name.endsWith(getPath())) {
-                            isDirectory.set(true);
-                            return FileVisitResult.TERMINATE;
-                        } else {
-                            return FileVisitResult.CONTINUE;
-                        }
-                    }
-
-                };
-                try {
-                    Files.walkFileTree(myPath, fileVisitor);
-                } catch (Exception ex) {
-                    Logger.logErr("Error while walking through the file tree: " + ex, ex);
-                }
-            } catch (Exception ex) {
-                Logger.logErr("Error while getting FileType: " + ex, ex);
-            }
-            if (fileSystem != null) {
-                fileSystem.close();
-            }
-            return FileType.of(isFile.get(), isDirectory.get());
-        } catch (Exception ex) {
-            Logger.logErr("Erorr while resolving path from file system: " + ex, ex);
-            return FileType.NON;
-        }
-    }
-
     /**
      * Creates an InputStream
      *
@@ -727,7 +749,7 @@ public class AdvancedFile implements Comparable<File> {
      */
     public final InputStream createInputStream() {
         if (isIntern()) {
-            return AdvancedFile.class.getResourceAsStream(getPath());
+            return AdvancedFile.class.getClassLoader().getResourceAsStream(getPath());
         } else {
             try {
                 return new FileInputStream(getPath());
@@ -1018,6 +1040,8 @@ public class AdvancedFile implements Comparable<File> {
                             fileSystem = FileSystems.newFileSystem(uri, Collections.<String, Object>emptyMap());
                             if (fileSystem != null) {
                                 myPath = fileSystem.getPath(getPath());
+                            } else {
+                                throw new IllegalArgumentException(String.format("Error 2 while resolving FileSystem from %s", uri));
                             }
                         } catch (Exception ex) {
                             Logger.logErr("Erorr while resolving path from file system: " + ex, ex);
@@ -1061,7 +1085,34 @@ public class AdvancedFile implements Comparable<File> {
 
                     };
                     try {
-                        Files.walkFileTree(myPath, fileVisitor);
+                        if (!recursiv) {
+                            files.addAll(Files.walk(myPath, 1).skip(1).map((path_) -> getChild(path_.getFileName().toString(), Files.isRegularFile(path_))).collect(Collectors.toList()));
+                        } else {
+                            final List<Map.Entry<Path, AdvancedFile>> depth = new ArrayList<>();
+                            depth.add(new AbstractMap.SimpleEntry<>(myPath, this));
+                            Files.walk(myPath).skip(1).forEach((path_) -> {
+                                Map.Entry<Path, AdvancedFile> entry = depth.get(depth.size() - 1);
+                                String temp_1 = entry.getKey().toString();
+                                if (temp_1.startsWith(PATH_SEPARATOR)) {
+                                    temp_1 = temp_1.substring(PATH_SEPARATOR.length());
+                                }
+                                String temp_2 = path_.toString();
+                                if (temp_2.startsWith(PATH_SEPARATOR)) {
+                                    temp_2 = temp_2.substring(PATH_SEPARATOR.length());
+                                }
+                                if (Files.isRegularFile(path_) && !temp_2.startsWith(temp_1)) {
+                                    depth.remove(depth.size() - 1);
+                                    entry = depth.get(depth.size() - 1);
+                                }
+                                final AdvancedFile temp = entry.getValue().getChild(path_.getFileName().toString(), Files.isRegularFile(path_));
+                                if (!files.contains(temp)) {
+                                    files.add(temp);
+                                }
+                                if (Files.isDirectory(path_)) {
+                                    depth.add(new AbstractMap.SimpleEntry<>(path_, temp));
+                                }
+                            });
+                        }
                     } catch (Exception ex) {
                         Logger.logErr("Error while walking through the file tree: " + ex, ex);
                     }
@@ -1151,14 +1202,14 @@ public class AdvancedFile implements Comparable<File> {
     private final URI getURIIntern(boolean log_exception) {
         try {
             if (isIntern()) {
-                return AdvancedFile.class.getResource(getPath()).toURI();
+                return AdvancedFile.class.getClassLoader().getResource(getPath()).toURI();
             } else {
                 return toFile().toURI();
             }
         } catch (Exception ex) {
             if (log_exception) {
                 if (ex instanceof NullPointerException) {
-                    Logger.log(this + " not found!");
+                    Logger.log("Error while creating URI, \"%s\" not found!", this);
                 } else {
                     Logger.logErr("Error while creating URI: " + ex, ex);
                 }
