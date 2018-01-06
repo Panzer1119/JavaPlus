@@ -30,9 +30,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.jar.JarEntry;
+import java.util.jar.JarInputStream;
 import java.util.stream.Collectors;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
 
 import org.apache.commons.io.IOUtils;
 
@@ -1042,93 +1042,95 @@ public class AdvancedFile implements Comparable<File> {
      */
     public final ArrayList<AdvancedFile> listAdvancedFiles(AdvancedFileFilter advancedFileFilter, boolean recursiv) {
         final ArrayList<AdvancedFile> files = new ArrayList<>();
-        if (!exists() || !isDirectory() || shouldBeFile()) {
+        final boolean directJar = isIntern() && StaticStandard.isJAR() && isRoot();
+        if (!directJar && (!exists() || !isDirectory() || shouldBeFile())) {
             return files;
         }
         try {
+            if (directJar) {
+                final CodeSource source = AdvancedFile.class.getProtectionDomain().getCodeSource();
+                if (source == null) {
+                    return files;
+                }
+                final URL jar = source.getLocation();
+                final JarInputStream jarInputStream = new JarInputStream(jar.openStream());
+                try {
+                    JarEntry entry = null;
+                    while ((entry = jarInputStream.getNextJarEntry()) != null) {
+                        files.add(new AdvancedFile(true, !entry.isDirectory(), entry.getName()));
+                        jarInputStream.closeEntry();
+                    }
+                } catch (Exception ex) {
+                    Logger.logErr("Error: " + ex, ex);
+                }
+                jarInputStream.close();
+                return files;
+            }
             if (isIntern()) {
-                if (StaticStandard.isJAR() && isRoot()) {
-                    final CodeSource source = AdvancedFile.class.getProtectionDomain().getCodeSource();
-                    if (source == null) {
-                        return files;
-                    }
-                    final URL jar = source.getLocation();
-                    final ZipInputStream zip = new ZipInputStream(jar.openStream());
-                    try {
-                        ZipEntry entry = null;
-                        while ((entry = zip.getNextEntry()) != null) {
-                            files.add(new AdvancedFile(true, entry.getName()));
-                        }
-                    } catch (Exception ex) {
-                        Logger.logErr("Error: " + ex, ex);
-                    }
-                    zip.close();
-                } else {
-                    final URI uri = getURIIntern(false);
-                    if (uri == null) {
-                        Logger.logErr("Error no URI: " + this, null);
-                        return files;
-                    }
-                    FileSystem fileSystem = null;
-                    try {
-                        Path myPath = null;
-                        if (uri.getScheme().equalsIgnoreCase("jar") || uri.getScheme().equalsIgnoreCase("zip")) {
-                            try {
-                                fileSystem = FileSystems.newFileSystem(uri, Collections.<String, Object>emptyMap());
-                                if (fileSystem != null) {
-                                    myPath = fileSystem.getPath(getPath());
-                                } else {
-                                    throw new IllegalArgumentException(String.format("Error 2 while resolving FileSystem from %s", uri));
-                                }
-                            } catch (Exception ex) {
-                                Logger.logErr("Error while resolving path from file system: " + ex, ex);
-                                return files;
-                            }
-                        } else {
-                            myPath = Paths.get(uri);
-                        }
-                        if (myPath == null) {
-                            Logger.logErr("Error no myPath: " + this, null);
-                            return files;
-                        }
+                final URI uri = getURIIntern(false);
+                if (uri == null) {
+                    Logger.logErr("Error no URI: " + this, null);
+                    return files;
+                }
+                FileSystem fileSystem = null;
+                try {
+                    Path myPath = null;
+                    if (uri.getScheme().equalsIgnoreCase("jar") || uri.getScheme().equalsIgnoreCase("zip")) {
                         try {
-                            if (!recursiv) {
-                                files.addAll(Files.walk(myPath, 1).skip(1).map((path_) -> getChild(path_.getFileName().toString(), Files.isRegularFile(path_))).collect(Collectors.toList()));
+                            fileSystem = FileSystems.newFileSystem(uri, Collections.<String, Object>emptyMap());
+                            if (fileSystem != null) {
+                                myPath = fileSystem.getPath(getPath());
                             } else {
-                                final List<Map.Entry<Path, AdvancedFile>> depth = new ArrayList<>();
-                                depth.add(new AbstractMap.SimpleEntry<>(myPath, this));
-                                Files.walk(myPath).skip(1).forEach((path_) -> {
-                                    Map.Entry<Path, AdvancedFile> entry = depth.get(depth.size() - 1);
-                                    String temp_1 = entry.getKey().toString();
-                                    if (temp_1.startsWith(PATH_SEPARATOR)) {
-                                        temp_1 = temp_1.substring(PATH_SEPARATOR.length());
-                                    }
-                                    String temp_2 = path_.toString();
-                                    if (temp_2.startsWith(PATH_SEPARATOR)) {
-                                        temp_2 = temp_2.substring(PATH_SEPARATOR.length());
-                                    }
-                                    if (Files.isRegularFile(path_) && !temp_2.startsWith(temp_1)) {
-                                        depth.remove(depth.size() - 1);
-                                        entry = depth.get(depth.size() - 1);
-                                    }
-                                    final AdvancedFile temp = entry.getValue().getChild(path_.getFileName().toString(), Files.isRegularFile(path_));
-                                    if (!files.contains(temp)) {
-                                        files.add(temp);
-                                    }
-                                    if (Files.isDirectory(path_)) {
-                                        depth.add(new AbstractMap.SimpleEntry<>(path_, temp));
-                                    }
-                                });
+                                throw new IllegalArgumentException(String.format("Error 2 while resolving FileSystem from %s", uri));
                             }
                         } catch (Exception ex) {
-                            Logger.logErr("Error while walking through the file tree: " + ex, ex);
+                            Logger.logErr("Error while resolving path from file system: " + ex, ex);
+                            return files;
+                        }
+                    } else {
+                        myPath = Paths.get(uri);
+                    }
+                    if (myPath == null) {
+                        Logger.logErr("Error no myPath: " + this, null);
+                        return files;
+                    }
+                    try {
+                        if (!recursiv) {
+                            files.addAll(Files.walk(myPath, 1).skip(1).map((path_) -> getChild(path_.getFileName().toString(), Files.isRegularFile(path_))).collect(Collectors.toList()));
+                        } else {
+                            final List<Map.Entry<Path, AdvancedFile>> depth = new ArrayList<>();
+                            depth.add(new AbstractMap.SimpleEntry<>(myPath, this));
+                            Files.walk(myPath).skip(1).forEach((path_) -> {
+                                Map.Entry<Path, AdvancedFile> entry = depth.get(depth.size() - 1);
+                                String temp_1 = entry.getKey().toString();
+                                if (temp_1.startsWith(PATH_SEPARATOR)) {
+                                    temp_1 = temp_1.substring(PATH_SEPARATOR.length());
+                                }
+                                String temp_2 = path_.toString();
+                                if (temp_2.startsWith(PATH_SEPARATOR)) {
+                                    temp_2 = temp_2.substring(PATH_SEPARATOR.length());
+                                }
+                                if (Files.isRegularFile(path_) && !temp_2.startsWith(temp_1)) {
+                                    depth.remove(depth.size() - 1);
+                                    entry = depth.get(depth.size() - 1);
+                                }
+                                final AdvancedFile temp = entry.getValue().getChild(path_.getFileName().toString(), Files.isRegularFile(path_));
+                                if (!files.contains(temp)) {
+                                    files.add(temp);
+                                }
+                                if (Files.isDirectory(path_)) {
+                                    depth.add(new AbstractMap.SimpleEntry<>(path_, temp));
+                                }
+                            });
                         }
                     } catch (Exception ex) {
-                        Logger.logErr("Error while listing AdvancedFiles: " + ex, ex);
+                        Logger.logErr("Error while walking through the file tree: " + ex, ex);
                     }
-                    if (fileSystem != null) {
-                        fileSystem.close();
-                    }
+                } catch (Exception ex) {
+                    Logger.logErr("Error while listing AdvancedFiles: " + ex, ex);
+                }
+                if (fileSystem != null) {
+                    fileSystem.close();
                 }
             } else {
                 for (File f : toFile().listFiles()) {
