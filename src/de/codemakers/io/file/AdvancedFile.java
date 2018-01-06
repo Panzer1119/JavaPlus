@@ -1090,6 +1090,9 @@ public class AdvancedFile implements Comparable<File> {
                             }
                         } catch (Exception ex) {
                             Logger.logErr("Error while resolving path from file system: " + ex, ex);
+                            if (fileSystem != null) {
+                                fileSystem.close();
+                            }
                             return files;
                         }
                     } else {
@@ -1097,6 +1100,9 @@ public class AdvancedFile implements Comparable<File> {
                     }
                     if (myPath == null) {
                         Logger.logErr("Error no myPath: " + this, null);
+                        if (fileSystem != null) {
+                            fileSystem.close();
+                        }
                         return files;
                     }
                     try {
