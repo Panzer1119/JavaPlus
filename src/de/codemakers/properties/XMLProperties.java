@@ -139,7 +139,8 @@ public class XMLProperties {
                         try {
                             final Properties temp_properties = new Properties();
                             temp_properties.putAll(properties);
-                            element.getChildren("property").forEach((element_) -> temp_properties.setProperty(evaluteProperty(element_.getAttributeValue("name"), properties_not_pass, temp_properties), evaluteProperty(element_.getAttributeValue("value"), properties_not_pass, temp_properties)));
+                            temp_properties.putAll(properties_not_pass);
+                            element.getChildren("property").forEach((element_) -> temp_properties.setProperty(evaluteProperty(element_.getAttributeValue("name"), temp_properties), evaluteProperty(element_.getAttributeValue("value"), temp_properties)));
                             properties_files.put(element.getAttributeValue("name"), temp_properties);
                         } catch (Exception ex) {
                         }
