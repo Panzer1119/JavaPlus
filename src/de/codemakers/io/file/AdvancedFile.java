@@ -1057,7 +1057,10 @@ public class AdvancedFile implements Comparable<File> {
                 try {
                     JarEntry entry = null;
                     while ((entry = jarInputStream.getNextJarEntry()) != null) {
-                        files.add(new AdvancedFile(true, !entry.isDirectory(), entry.getName()));
+                        final AdvancedFile temp = new AdvancedFile(true, !entry.isDirectory(), entry.getName());
+                        if (advancedFileFilter == null || advancedFileFilter.accept(temp.getParent(), temp.getName())) {
+                            files.add(temp);
+                        }
                         jarInputStream.closeEntry();
                     }
                 } catch (Exception ex) {
@@ -1096,7 +1099,7 @@ public class AdvancedFile implements Comparable<File> {
                     }
                     try {
                         if (!recursiv) {
-                            files.addAll(Files.walk(myPath, 1).skip(1).map((path_) -> getChild(path_.getFileName().toString(), Files.isRegularFile(path_))).collect(Collectors.toList()));
+                            files.addAll(Files.walk(myPath, 1).skip(1).map((path_) -> getChild(path_.getFileName().toString(), Files.isRegularFile(path_))).filter((advancedFile) -> advancedFileFilter == null || advancedFileFilter.accept(advancedFile.getParent(), advancedFile.getName())).collect(Collectors.toList()));
                         } else {
                             final List<Map.Entry<Path, AdvancedFile>> depth = new ArrayList<>();
                             depth.add(new AbstractMap.SimpleEntry<>(myPath, this));
@@ -1115,7 +1118,7 @@ public class AdvancedFile implements Comparable<File> {
                                     entry = depth.get(depth.size() - 1);
                                 }
                                 final AdvancedFile temp = entry.getValue().getChild(path_.getFileName().toString(), Files.isRegularFile(path_));
-                                if (!files.contains(temp)) {
+                                if (!files.contains(temp) && (advancedFileFilter == null || advancedFileFilter.accept(temp.getParent(), temp.getName()))) {
                                     files.add(temp);
                                 }
                                 if (Files.isDirectory(path_)) {
