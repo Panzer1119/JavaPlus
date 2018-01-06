@@ -1159,7 +1159,7 @@ public class AdvancedFile implements Comparable<File> {
      * @return A reference to this AdvancedFile
      */
     public final AdvancedFile forEachChild(Consumer<AdvancedFile> consumer) {
-        listAdvancedFiles().stream().forEach(consumer);
+        listAdvancedFiles().forEach(consumer);
         return this;
     }
 
@@ -1172,7 +1172,7 @@ public class AdvancedFile implements Comparable<File> {
      * @return A reference to this AdvancedFile
      */
     public final AdvancedFile forEachChild(boolean recursiv, Consumer<AdvancedFile> consumer) {
-        listAdvancedFiles(recursiv).stream().forEach(consumer);
+        listAdvancedFiles(recursiv).forEach(consumer);
         return this;
     }
 
@@ -1185,7 +1185,7 @@ public class AdvancedFile implements Comparable<File> {
      * @return A reference to this AdvancedFile
      */
     public final AdvancedFile forEachChild(AdvancedFileFilter advancedFileFilter, Consumer<AdvancedFile> consumer) {
-        listAdvancedFiles(advancedFileFilter).stream().forEach(consumer);
+        listAdvancedFiles(advancedFileFilter).forEach(consumer);
         return this;
     }
 
@@ -1199,7 +1199,7 @@ public class AdvancedFile implements Comparable<File> {
      * @return A reference to this AdvancedFile
      */
     public final AdvancedFile forEachChild(AdvancedFileFilter advancedFileFilter, boolean recursiv, Consumer<AdvancedFile> consumer) {
-        listAdvancedFiles(advancedFileFilter, recursiv).stream().forEach(consumer);
+        listAdvancedFiles(advancedFileFilter, recursiv).forEach(consumer);
         return this;
     }
 
