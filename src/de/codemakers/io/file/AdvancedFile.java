@@ -400,6 +400,18 @@ public class AdvancedFile implements Comparable<File> {
     }
 
     /**
+     * Returns the Path with a custom separator
+     *
+     * @return String Path
+     */
+    public final String getPath(String separator) {
+        if (path == null) {
+            path = createPath();
+        }
+        return path.replaceAll((this.separator.equals(WINDOWS_SEPARATOR) ? WINDOWS_SEPARATOR : "") + this.separator, separator);
+    }
+
+    /**
      * Returns the Path
      *
      * @return String Path
@@ -423,7 +435,7 @@ public class AdvancedFile implements Comparable<File> {
             path_builder.append(folder.getAbsolutePath());
         }
         path_builder.append(paths.stream().map((path_temp) -> ((path_temp.startsWith(separator) ? "" : separator)) + path_temp).collect(Collectors.joining()));
-        if ((path_builder.length() >= separator.length()) && (folder == null && relative_package == null) && (isAbsolute() || !isIntern())) {
+        if ((path_builder.length() >= separator.length()) && (folder == null && relative_package == null) && (!isIntern() || isAbsolute())) {
             path_builder.delete(0, separator.length());
         }
         return path_builder.toString();
@@ -529,6 +541,8 @@ public class AdvancedFile implements Comparable<File> {
             }
         } else if (paths.size() > 1) {
             return new AdvancedFile(isIntern, false, folder, getPaths(paths.size() - 1));
+        } else if (paths.size() == 1) {
+            return new AdvancedFile(isIntern, false, folder);
         } else if (folder != null) {
             return new AdvancedFile(isIntern, false, folder.getParentFile());
         } else {
@@ -776,7 +790,7 @@ public class AdvancedFile implements Comparable<File> {
 
     public final AdvancedFile getRoot() {
         String path_ = getAbsoluteAdvancedFile().getPath();
-        final int index = path_.indexOf(PATH_SEPARATOR);
+        final int index = path_.indexOf(separator);
         if (index != -1) {
             path_ = path_.substring(0, index);
         }
@@ -831,6 +845,7 @@ public class AdvancedFile implements Comparable<File> {
     public final String toString() {
         //return String.format("\"%s\" (intern: %b, absolute: %b, shouldBeFile: %b, exists: %b, file: %b)", getPath(), isIntern(), isAbsolute(), shouldBeFile(), exists(), isFile());
         return getPath();
+        //return String.format("Folder: %s, Paths: %s", folder, paths);
     }
 
     /**
@@ -1321,14 +1336,14 @@ public class AdvancedFile implements Comparable<File> {
         boolean finished = false;
         int smallest_count = -1;
         while (!finished) {
-            smallest_count = advancedFiles.get(0).getPath().split(PATH_SEPARATOR).length;
+            smallest_count = advancedFiles.get(0).getPath(PATH_SEPARATOR).split(PATH_SEPARATOR).length;
             for (AdvancedFile advancedFile : advancedFiles) {
-                smallest_count = Math.min(smallest_count, advancedFile.getPath().split(PATH_SEPARATOR).length);
+                smallest_count = Math.min(smallest_count, advancedFile.getPath(PATH_SEPARATOR).split(PATH_SEPARATOR).length);
             }
             final int smallest_count_final = smallest_count;
-            final boolean all = advancedFiles.stream().allMatch((advancedFile) -> smallest_count_final == advancedFile.getPath().split(PATH_SEPARATOR).length);
+            final boolean all = advancedFiles.stream().allMatch((advancedFile) -> smallest_count_final == advancedFile.getPath(PATH_SEPARATOR).split(PATH_SEPARATOR).length);
             advancedFiles = new ArrayList<>(advancedFiles.stream().map((advancedFile) -> {
-                if (all || advancedFile.getPath().split(PATH_SEPARATOR).length > smallest_count_final) {
+                if (all || advancedFile.getPath(PATH_SEPARATOR).split(PATH_SEPARATOR).length > smallest_count_final) {
                     return advancedFile.getParent();
                 }
                 return advancedFile;
