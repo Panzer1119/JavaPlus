@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.jdom2.Attribute;
@@ -32,7 +33,8 @@ public class XMLProperties {
     private final XMLProperties xml_root;
     private final Properties properties = new Properties();
     private final Properties properties_not_pass = new Properties();
-    private final Map<String, Properties> properties_files = new HashMap<>();
+    private final List<Predicate<String>> exclude_files = new ArrayList<>();
+    private final Map<Predicate<String>, Properties> properties_files = new HashMap<>();
     private final List<XMLProperties> xml_properties = new ArrayList<>();
 
     public XMLProperties(AdvancedFile root) {
@@ -69,8 +71,8 @@ public class XMLProperties {
 
     public final Properties getProperties(AdvancedFile file) {
         if (Objects.equals(root, file)) {
-            return properties_files.get(file.getName());
-        }
+            return getProperties();
+        } 
         if (file == null) {
             return null;
         }
@@ -99,7 +101,14 @@ public class XMLProperties {
                     return null;
                 }
             }
-            return temp_xml_properties.properties_files.get(name);
+            if (temp_xml_properties.exclude_files.stream().anyMatch((predicate) -> predicate.test(name))) {
+                return null;
+            }
+            final Map.Entry<Predicate<String>, Properties> entry = temp_xml_properties.properties_files.entrySet().stream().filter((entry_) -> entry_.getKey().test(name)).findFirst().orElse(null);
+            if (entry != null) {
+                return entry.getValue();
+            }
+            return null;
         } catch (Exception ex) {
             Logger.logErr("Error while getting Properties for \"%s%s%s\": " + ex, ex, path, AdvancedFile.PATH_SEPARATOR, name);
             return null;
@@ -122,31 +131,96 @@ public class XMLProperties {
                     final Element rootElement = document.getRootElement();
                     rootElement.getChildren("property").forEach((element) -> {
                         try {
+                            final Attribute attribute_name = element.getAttribute("name");
+                            if (attribute_name == null) {
+                                throw new IllegalArgumentException("Your name paramater is missing");
+                            }
+                            final Attribute attribute_value = element.getAttribute("value");
                             Properties temp_properties = null;
-                            final Attribute attribute = element.getAttribute("pass");
-                            if (attribute == null || Objects.equals("true", attribute.getValue())) {
+                            final Attribute attribute_pass = element.getAttribute("pass");
+                            if (attribute_pass == null || Objects.equals("true", attribute_pass.getValue())) {
                                 temp_properties = properties;
-                            } else if (Objects.equals("false", attribute.getValue())) {
+                            } else if (Objects.equals("false", attribute_pass.getValue())) {
                                 temp_properties = properties_not_pass;
                             } else {
-                                throw new RuntimeException(String.format("Your value for the pass paramater \"%s\" is not recognized", attribute.getValue()));
+                                throw new IllegalArgumentException(String.format("Your value for the pass paramater \"%s\" is not recognized", attribute_pass.getValue()));
                             }
-                            temp_properties.setProperty(evaluteProperty(element.getAttributeValue("name"), properties_not_pass, properties), evaluteProperty(element.getAttributeValue("value"), properties_not_pass, properties));
+                            temp_properties.setProperty(evaluteProperty(attribute_name.getValue(), properties_not_pass, properties), attribute_value == null ? null : evaluteProperty(attribute_value.getValue(), properties_not_pass, properties));
                         } catch (Exception ex) {
+                            Logger.logErr("Error 1 while analyzing XMLProperties: %s", ex, root);
                         }
                     });
                     rootElement.getChildren("file").forEach((element) -> {
                         try {
+                            final Attribute attribute_name = element.getAttribute("name");
+                            if (attribute_name == null) {
+                                throw new IllegalArgumentException("Your name paramater is missing");
+                            }
+                            boolean regex = false;
+                            final Attribute attribute_regex = element.getAttribute("regex");
+                            if (attribute_regex == null || Objects.equals("false", attribute_regex.getValue())) {
+                                regex = false;
+                            } else if (Objects.equals("true", attribute_regex.getValue())) {
+                                regex = true;
+                            } else {
+                                throw new IllegalArgumentException(String.format("Your value for the regex paramater \"%s\" is not recognized", attribute_regex.getValue()));
+                            }
+                            boolean exclude = false;
+                            final Attribute attribute_exclude = element.getAttribute("exclude");
+                            if (attribute_exclude == null || Objects.equals("false", attribute_exclude.getValue())) {
+                                exclude = false;
+                            } else if (Objects.equals("true", attribute_exclude.getValue())) {
+                                exclude = true;
+                            } else {
+                                throw new IllegalArgumentException(String.format("Your value for the exclude paramater \"%s\" is not recognized", attribute_exclude.getValue()));
+                            }
                             final Properties temp_properties = new Properties();
                             temp_properties.putAll(properties);
                             temp_properties.putAll(properties_not_pass);
-                            element.getChildren("property").forEach((element_) -> temp_properties.setProperty(evaluteProperty(element_.getAttributeValue("name"), temp_properties), evaluteProperty(element_.getAttributeValue("value"), temp_properties)));
-                            properties_files.put(element.getAttributeValue("name"), temp_properties);
+                            element.getChildren("property").forEach((element_) -> {
+                                try {
+                                    final Attribute attribute_name_ = element_.getAttribute("name");
+                                    if (attribute_name_ == null) {
+                                        throw new IllegalArgumentException("Your name paramater is missing");
+                                    }
+                                    final Attribute attribute_value_ = element_.getAttribute("value");
+                                    temp_properties.setProperty(evaluteProperty(attribute_name_.getValue(), temp_properties), attribute_value_ == null ? null : evaluteProperty(attribute_value_.getValue(), temp_properties));
+                                } catch (Exception ex) {
+                                    Logger.logErr("Error 4 while analyzing XMLProperties: %s", ex, root);
+                                }
+                            });
+                            if (!regex) {
+                                final Predicate<String> predicate = new Predicate<String>() {
+                                    @Override
+                                    public final boolean test(String name_) {
+                                        return Objects.equals(attribute_name.getValue(), name_);
+                                    }
+                                };
+                                if (exclude) {
+                                    exclude_files.add(predicate);
+                                } else {
+                                    properties_files.put(predicate, temp_properties);
+                                }
+                            } else {
+                                final Pattern pattern = Pattern.compile(attribute_name.getValue());
+                                final Predicate<String> predicate = new Predicate<String>() {
+                                    @Override
+                                    public final boolean test(String name_) {
+                                        return pattern.matcher(name_).matches();
+                                    }
+                                };
+                                if (exclude) {
+                                    exclude_files.add(predicate);
+                                } else {
+                                    properties_files.put(predicate, temp_properties);
+                                }
+                            }
                         } catch (Exception ex) {
+                            Logger.logErr("Error 2 while analyzing XMLProperties: %s", ex, root);
                         }
                     });
                 } catch (Exception ex) {
-                    Logger.logErr("Error while analyzing XMLProperties: %s", ex, root);
+                    Logger.logErr("Error 3 while analyzing XMLProperties: %s", ex, root);
                 }
             }
             root.forEachChild((parent, name) -> new AdvancedFile(parent.isIntern(), parent, name).isDirectory(), false, (file) -> xml_properties.add(new XMLProperties(file, this)));

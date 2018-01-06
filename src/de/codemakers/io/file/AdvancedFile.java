@@ -402,6 +402,8 @@ public class AdvancedFile implements Comparable<File> {
     /**
      * Returns the Path with a custom separator
      *
+     * @param separator Custom separator
+     *
      * @return String Path
      */
     public final String getPath(String separator) {
