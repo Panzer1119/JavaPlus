@@ -40,6 +40,7 @@ public class XMLProperties {
     }
 
     XMLProperties(AdvancedFile root, XMLProperties xml_root) {
+        Objects.requireNonNull(root);
         this.root = root;
         this.xml_root = xml_root;
         if (xml_root != null) {
@@ -70,7 +71,18 @@ public class XMLProperties {
         if (Objects.equals(root, file)) {
             return properties_files.get(file.getName());
         }
-        return getProperties(file.getParent().getPath().substring(root.getPath().length()), file.getName());
+        if (file == null) {
+            return null;
+        }
+        String path_temp = file.getPath();
+        if (root.getPath().length() > path_temp.length()) {
+            return null;
+        }
+        path_temp = path_temp.substring(root.getPath().length());
+        if (!path_temp.isEmpty()) {
+            path_temp = path_temp.substring(0, path_temp.length() - 1 - AdvancedFile.getName(path_temp).length());
+        }
+        return getProperties(path_temp, file.getName());
     }
 
     public final Properties getProperties(String path, String name) {
