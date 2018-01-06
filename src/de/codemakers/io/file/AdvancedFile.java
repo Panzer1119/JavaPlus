@@ -1312,7 +1312,7 @@ public class AdvancedFile implements Comparable<File> {
     public static final AdvancedFile getClosestCommonParent(AdvancedFile... advancedFiles_array) {
         List<AdvancedFile> advancedFiles = Arrays.asList(advancedFiles_array);
         if (advancedFiles.isEmpty()) {
-            Logger.logErr("No AdvancedFiles given", null);
+            //Logger.logErr("No AdvancedFiles given", null);
             return null;
         } else if (advancedFiles.size() == 1) {
             return advancedFiles.get(0).getParent();
