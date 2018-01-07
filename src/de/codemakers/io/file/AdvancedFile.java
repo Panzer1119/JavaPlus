@@ -150,6 +150,19 @@ public class AdvancedFile implements Comparable<File> {
      * @param parent Relative Class
      * @param paths String Array Paths
      */
+    public AdvancedFile(boolean shouldBeFile, Class<?> parent, String... paths) {
+        this(shouldBeFile, parent == null ? null : parent.getPackage(), paths);
+    }
+
+    /**
+     * Creates an AdvancedFile which is intern and maybe absolute (parent ==
+     * null)
+     *
+     * @param shouldBeFile Boolean if this AdvancedFile should be a file or a
+     * directory
+     * @param parent Relative Package
+     * @param paths String Array Paths
+     */
     public AdvancedFile(boolean shouldBeFile, Package parent, String... paths) {
         this.isIntern = true;
         this.shouldBeFile = shouldBeFile;
