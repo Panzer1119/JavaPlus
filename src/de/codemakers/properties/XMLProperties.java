@@ -72,7 +72,7 @@ public class XMLProperties {
     public final Properties getProperties(AdvancedFile file) {
         if (Objects.equals(root, file)) {
             return getProperties();
-        } 
+        }
         if (file == null) {
             return null;
         }
@@ -223,7 +223,22 @@ public class XMLProperties {
                     Logger.logErr("Error 3 while analyzing XMLProperties: %s", ex, root);
                 }
             }
-            root.forEachChild((parent, name) -> new AdvancedFile(parent.isIntern(), parent, name).isDirectory(), false, (file) -> xml_properties.add(new XMLProperties(file, this)));
+            root.forEachChild((parent, name) -> {
+                try {
+                    Logger.log("parent: %s, name: %s", parent, name);
+                    final AdvancedFile file_ = new AdvancedFile(parent.isIntern(), parent, name);
+                    Logger.log("file_: %s", file_);
+                    Logger.log("file_.isDirectory(): %s", file_.isDirectory());
+                    return file_.isDirectory();
+                } catch (Exception ex) {
+                    Logger.logErr("DAFUQ 1243566767: " + ex, ex);
+                    return false;
+                }
+            }, false, (file) -> {
+                Logger.log("file: ", file);
+                xml_properties.add(new XMLProperties(file, this));
+            }
+            );
             xml_properties.forEach(XMLProperties::analyze);
         } catch (Exception ex) {
             Logger.logErr("Error while analyzing XMLProperties: %s", ex, root);

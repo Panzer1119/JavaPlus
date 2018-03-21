@@ -1120,7 +1120,7 @@ public class AdvancedFile implements Comparable<File> {
                     }
                     try {
                         if (!recursiv) {
-                            files.addAll(Files.walk(myPath, 1).skip(1).map((path_) -> getChild(path_.getFileName().toString(), Files.isRegularFile(path_))).filter((advancedFile) -> advancedFileFilter == null || advancedFileFilter.accept(advancedFile.getParent(), advancedFile.getName())).collect(Collectors.toList()));
+                            files.addAll(Files.walk(myPath, 1).skip(1).map((path_) -> getChild(path_.getFileName().toString(), Files.isRegularFile(path_))).filter((advancedFile) -> advancedFile != null && (advancedFileFilter == null || advancedFileFilter.accept(advancedFile.getParent(), advancedFile.getName()))).collect(Collectors.toList()));
                         } else {
                             final List<Map.Entry<Path, AdvancedFile>> depth = new ArrayList<>();
                             depth.add(new AbstractMap.SimpleEntry<>(myPath, this));
